@@ -1,65 +1,54 @@
-package com.rywent.langrid.presentation.screens.words.creationPanels
+package com.rywent.langrid.presentation.screens.words.editPanels
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.rywent.langrid.presentation.screens.words.WordItem
-import com.rywent.langrid.services.TranscriptionService
+import com.rywent.langrid.presentation.screens.words.creationPanels.WordImageSection
+import com.rywent.langrid.services.ImageSearchService
 import com.rywent.langrid.services.TranscriptionResult
+import com.rywent.langrid.services.TranscriptionService
 import kotlinx.coroutines.launch
-import java.util.UUID
-import com.rywent.langrid.services.OpenverseImageSearchService
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateWordPanel(
+fun EditWordPanel(
+    word: WordItem,
     targetLanguage: String = "en",
     onDismiss: () -> Unit,
-    onCreate: (WordItem) -> Unit
+    onSave: (WordItem) -> Unit
 ) {
-    var term by remember { mutableStateOf("") }
-    var translation by remember { mutableStateOf("") }
-    var transcription by remember { mutableStateOf("") }
-    var exampleSentence by remember { mutableStateOf("") }
-    var exampleTranslation by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var partOfSpeech by remember { mutableStateOf("noun") }
+    var term by remember { mutableStateOf(word.term) }
+    var translation by remember { mutableStateOf(word.translation.orEmpty()) }
+    var transcription by remember { mutableStateOf(word.transcription.orEmpty()) }
+    var exampleSentence by remember { mutableStateOf(word.exampleSentence.orEmpty()) }
+    var exampleTranslation by remember { mutableStateOf(word.exampleTranslation.orEmpty()) }
+    var notes by remember { mutableStateOf(word.notes.orEmpty()) }
+    var partOfSpeech by remember { mutableStateOf(word.partOfSpeech ?: "noun") }
     var termError by remember { mutableStateOf(false) }
-
-
     var transcriptionError by remember { mutableStateOf<String?>(null) }
 
-    var imageUrls by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedImageUrl by remember { mutableStateOf<String?>(null) }
+    var imageUrls by remember {
+        mutableStateOf(word.imageUrl?.let { listOf(it) } ?: emptyList())
+    }
+    var selectedImageUrl by remember { mutableStateOf(word.imageUrl) }
     var isLoadingImages by remember { mutableStateOf(false) }
     var hasAttemptedSelect by remember { mutableStateOf(false) }
-
     var isLoadingTranscription by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
@@ -79,9 +68,8 @@ fun CreateWordPanel(
         if (query.length >= 2) {
             coroutineScope.launch {
                 isLoadingImages = true
-                val results = OpenverseImageSearchService.searchImages(query)
-                imageUrls = results
-                selectedImageUrl = null
+                val results = ImageSearchService.searchImages(query)
+                imageUrls = (listOfNotNull(selectedImageUrl) + results).distinct()
                 isLoadingImages = false
             }
         }
@@ -93,7 +81,6 @@ fun CreateWordPanel(
             coroutineScope.launch {
                 isLoadingTranscription = true
                 transcriptionError = null
-
                 when (val result = TranscriptionService.fetchTranscription(targetLanguage, currentTerm)) {
                     is TranscriptionResult.Success -> {
                         transcription = result.transcription
@@ -130,7 +117,7 @@ fun CreateWordPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "New Word",
+                    text = "Edit Word",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -155,7 +142,7 @@ fun CreateWordPanel(
                     },
                     label = { Text("Word *") },
                     isError = termError,
-                    supportingText = if (termError) { { Text("Required") } } else null,
+                    supportingText = if (termError) {{ Text("Required") }} else null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -167,7 +154,10 @@ fun CreateWordPanel(
                             Icon(
                                 imageVector = Icons.Rounded.Search,
                                 contentDescription = "Search images",
-                                tint = if (term.trim().length >= 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                tint = if (term.trim().length >= 2)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                             )
                         }
                     }
@@ -184,8 +174,12 @@ fun CreateWordPanel(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        val types = listOf("noun" to "Noun", "verb" to "Verb", "adjective" to "Adjective", "other" to "Other")
-                        types.forEach { (key, label) ->
+                        listOf(
+                            "noun" to "Noun",
+                            "verb" to "Verb",
+                            "adjective" to "Adjective",
+                            "other" to "Other"
+                        ).forEach { (key, label) ->
                             FilterChip(
                                 selected = partOfSpeech == key,
                                 onClick = { partOfSpeech = key },
@@ -209,7 +203,7 @@ fun CreateWordPanel(
                     value = transcription,
                     onValueChange = {
                         transcription = it
-                        if (transcriptionError != null) transcriptionError = null
+                        transcriptionError = null
                     },
                     label = { Text("Transcription") },
                     isError = transcriptionError != null,
@@ -223,12 +217,15 @@ fun CreateWordPanel(
                             enabled = term.trim().length >= 2 && !isLoadingTranscription
                         ) {
                             if (isLoadingTranscription) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.AutoFixHigh,
-                                    contentDescription = "Auto fetch transcription",
-                                    tint = if (term.trim().length >= 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                    contentDescription = "Auto transcription",
+                                    tint = if (term.trim().length >= 2)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                 )
                             }
                         }
@@ -247,15 +244,13 @@ fun CreateWordPanel(
                         if (term.trim().length >= 2) {
                             coroutineScope.launch {
                                 isLoadingImages = true
-                                val moreResults = OpenverseImageSearchService.loadMoreImages(term)
-                                imageUrls = (imageUrls + moreResults).distinct()
+                                val more = ImageSearchService.loadMoreImages(term)
+                                imageUrls = (imageUrls + more).distinct()
                                 isLoadingImages = false
                             }
                         }
                     },
-                    onChooseFromGallery = {
-                        galleryLauncher.launch("image/*")
-                    }
+                    onChooseFromGallery = { galleryLauncher.launch("image/*") }
                 )
 
                 OutlinedTextField(
@@ -301,9 +296,8 @@ fun CreateWordPanel(
                         hasAttemptedSelect = true
                         return@Button
                     }
-                    onCreate(
-                        WordItem(
-                            id = UUID.randomUUID().toString(),
+                    onSave(
+                        word.copy(
                             term = term.trim(),
                             translation = translation.trim().ifBlank { null },
                             transcription = transcription.trim().ifBlank { null },
@@ -320,167 +314,10 @@ fun CreateWordPanel(
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Create Word")
+                Text("Save changes")
             }
 
             Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-fun WordImageSection(
-    imageUrls: List<String>,
-    selectedImageUrl: String?,
-    isLoading: Boolean,
-    showWarning: Boolean,
-    onImageSelected: (String) -> Unit,
-    onLoadMore: () -> Unit,
-    onChooseFromGallery: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Illustration",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (showWarning) scheme.error else scheme.onSurfaceVariant
-            )
-            if (showWarning) {
-                Text(
-                    text = "Please select an image!",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.error
-                )
-            }
-        }
-
-        when {
-            isLoading && imageUrls.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(84.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                }
-            }
-            imageUrls.isNotEmpty() -> {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(imageUrls) { url ->
-                        val isSelected = selectedImageUrl == url
-                        Box(
-                            modifier = Modifier
-                                .size(84.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) scheme.primary else scheme.outlineVariant,
-                                    shape = RoundedCornerShape(14.dp)
-                                )
-                                .clickable { onImageSelected(url) }
-                        ) {
-                            AsyncImage(
-                                model = url,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(scheme.primary.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(scheme.primary),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Selected",
-                                            tint = scheme.onPrimary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .size(84.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .border(
-                                    width = 1.dp,
-                                    color = scheme.outlineVariant,
-                                    shape = RoundedCornerShape(14.dp)
-                                )
-                                .background(scheme.surfaceContainerHighest)
-                                .clickable(enabled = !isLoading, onClick = onLoadMore),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Load more",
-                                    tint = scheme.onSurfaceVariant,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            else -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(scheme.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Type a word and tap the search icon to fetch images",
-                        fontSize = 12.sp,
-                        color = scheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        }
-
-        OutlinedButton(
-            onClick = onChooseFromGallery,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Choose from gallery")
         }
     }
 }

@@ -23,6 +23,8 @@ data class FolderNode(
     val title: String,
     val description: String? = null,
     val icon: ImageVector? = null,
+    val nativeLanguage: String = "ru",
+    val targetLanguage: String = "en",
     val wordsCount: Int = 0,
     val updated: String = "updated today",
     val isPinned: Boolean = false,
@@ -36,20 +38,35 @@ sealed interface SearchResultItem {
 }
 
 data class WordsUiState(
+    // search
     val searchQuery: String = "",
     val searchResults: List<SearchResultItem> = emptyList(),
     val isSearchActive: Boolean = false,
     val rootFolders: List<FolderNode> = emptyList(),
     val navigationStack: List<FolderNode> = emptyList(),
-    val showCreateThemePanel: Boolean = false,
+
+    // create panels
+    val showCreateTopicPanel: Boolean = false,
     val showCreateSubfolderPanel: Boolean = false,
     val showCreateWordPanel: Boolean = false,
-    val themeSortOption: GeneralSortOption? = null,
+
+    // sort
+    val topicSortOption: GeneralSortOption? = null,
     val folderSortOption: GeneralSortOption? = null,
     val wordSortOption: GeneralSortOption? = null,
     val showSortPanel: Boolean = false,
     val sortVersion: Int = 0,
-    val sortCategory: SortCategory = SortCategory.THEMES
+    val sortCategory: SortCategory = SortCategory.THEMES,
+
+    // edit panels
+    val showEditTopicPanel: Boolean = false,
+    val showEditSubfolderPanel: Boolean = false,
+    val selectedFolderForEdit: FolderNode? = null,
+
+    // word info and edit panels
+    val showWordDetailsPanel: Boolean = false,
+    val selectedWord: WordItem? = null,
+    val showEditWordPanel: Boolean = false
 ) {
     val currentFolder: FolderNode? get() = navigationStack.lastOrNull()
     val breadcrumbPath: List<String>

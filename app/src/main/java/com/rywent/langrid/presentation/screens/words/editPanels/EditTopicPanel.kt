@@ -1,8 +1,7 @@
-package com.rywent.langrid.presentation.screens.words.creationPanels
+package com.rywent.langrid.presentation.screens.words.editPanels
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -12,8 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,32 +22,33 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rywent.langrid.presentation.screens.words.FolderNode
+import com.rywent.langrid.presentation.screens.words.components.FullIconPicker
+import com.rywent.langrid.presentation.screens.words.components.themeIcons
 
-private val themeIcons = listOf(
-    Icons.Rounded.Home,
-    Icons.Rounded.AirplanemodeActive,
-    Icons.Rounded.Restaurant,
-    Icons.Rounded.School,
-    Icons.Rounded.Work,
-    Icons.Rounded.SportsEsports,
-    Icons.Rounded.MusicNote,
-    Icons.Rounded.Favorite,
-    Icons.Rounded.Pets,
-    Icons.Rounded.LocalCafe,
-    Icons.Rounded.ShoppingBag,
-    Icons.Rounded.FitnessCenter
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateThemePanel(
+fun EditThemePanel(
+    folder: FolderNode,
     onDismiss: () -> Unit,
-    onCreate: (title: String, description: String?, icon: ImageVector) -> Unit
+    onSave: (
+        title: String,
+        description: String?,
+        icon: ImageVector
+    ) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var selectedIcon by remember { mutableStateOf(themeIcons.first()) }
+    var title by remember { mutableStateOf(folder.title) }
+    var description by remember { mutableStateOf(folder.description.orEmpty()) }
+    var selectedIcon by remember {
+        mutableStateOf(folder.icon ?: themeIcons.first())
+    }
     var titleError by remember { mutableStateOf(false) }
+
+
+    var nativeExpanded by remember { mutableStateOf(false) }
+    var targetExpanded by remember { mutableStateOf(false) }
+    var showFullIconPicker by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onDismiss)
 
@@ -65,14 +65,13 @@ fun CreateThemePanel(
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
         ) {
-            // header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "New Theme",
+                    text = "Edit Theme",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -86,16 +85,9 @@ fun CreateThemePanel(
             Column(
                 modifier = Modifier
                     .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // icon
-                Text(
-                    text = "Icon",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -112,62 +104,70 @@ fun CreateThemePanel(
                     )
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Icon",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    TextButton(onClick = { showFullIconPicker = true }) {
+                        Text("More icons")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForwardIos,
+                            null,
+                            Modifier.size(14.dp)
+                        )
+                    }
+                }
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(6),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp),
+                        .height(134.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     userScrollEnabled = false
                 ) {
                     items(themeIcons) { icon ->
                         val selected = icon == selectedIcon
-                        Box(
-                            modifier = Modifier
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (selected) scheme.primaryContainer
-                                    else scheme.surfaceContainerHigh
-                                )
-                                .clickable { selectedIcon = icon },
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            modifier = Modifier.aspectRatio(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                            onClick = { selectedIcon = icon }
                         ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = if (selected) scheme.onPrimaryContainer
-                                else scheme.onSurfaceVariant
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
-
-                // title
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
                         title = it
                         titleError = false
                     },
-                    label = { Text("Title") },
+                    label = { Text("Title *") },
                     isError = titleError,
-                    supportingText = if (titleError) {
-                        { Text("Required") }
-                    } else null,
+                    supportingText = if (titleError) {{ Text("Required") }} else null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp)
                 )
 
-                Spacer(Modifier.height(12.dp))
 
-                // description
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -181,14 +181,13 @@ fun CreateThemePanel(
 
             Spacer(Modifier.height(20.dp))
 
-            // create
             Button(
                 onClick = {
                     if (title.isBlank()) {
                         titleError = true
                         return@Button
                     }
-                    onCreate(
+                    onSave(
                         title.trim(),
                         description.trim().ifBlank { null },
                         selectedIcon
@@ -199,10 +198,28 @@ fun CreateThemePanel(
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Create Theme")
+                Text("Save changes")
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showFullIconPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showFullIconPicker = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            FullIconPicker(
+                selectedIcon = selectedIcon,
+                onIconSelected = {
+                    selectedIcon = it
+                    showFullIconPicker = false
+                },
+                onDismiss = { showFullIconPicker = false }
+            )
         }
     }
 }

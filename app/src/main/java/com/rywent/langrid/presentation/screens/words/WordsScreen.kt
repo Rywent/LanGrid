@@ -3,7 +3,6 @@ package com.rywent.langrid.presentation.screens.words
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -14,9 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
@@ -26,8 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,10 +33,14 @@ import com.rywent.langrid.presentation.screens.words.components.SearchResultFold
 import com.rywent.langrid.presentation.screens.words.components.SearchResultWordCard
 import com.rywent.langrid.presentation.screens.words.components.SortBottomSheet
 import com.rywent.langrid.presentation.screens.words.components.SortCategory
-import com.rywent.langrid.presentation.screens.words.components.TableCard
+import com.rywent.langrid.presentation.screens.words.components.ThemeCard
+import com.rywent.langrid.presentation.screens.words.components.WordDetailsSheet
 import com.rywent.langrid.presentation.screens.words.creationPanels.CreateSubfolderPanel
 import com.rywent.langrid.presentation.screens.words.creationPanels.CreateThemePanel
 import com.rywent.langrid.presentation.screens.words.creationPanels.CreateWordPanel
+import com.rywent.langrid.presentation.screens.words.editPanels.EditWordPanel
+import com.rywent.langrid.presentation.screens.words.editPanels.EditSubfolderPanel
+import com.rywent.langrid.presentation.screens.words.editPanels.EditThemePanel
 import com.rywent.langrid.presentation.screens.words.subScreens.WordsFolderPage
 import kotlinx.coroutines.launch
 
@@ -88,21 +87,25 @@ fun WordsScreen(
                 WordsFolderPage(
                     currentFolder = folder,
                     breadcrumbPath = uiState.breadcrumbPath,
-                    paddingValues,
+                    paddingValues = paddingValues,
                     onBackClick = { viewModel.goBack() },
                     onSubFolderClick = { subFolder -> viewModel.navigateIntoFolder(subFolder) },
                     onBreadcrumbClick = { index -> viewModel.popToFolderIndex(index) },
                     onAddWordClick = { viewModel.onCreateWordClick() },
                     onAddSubfolderClick = { viewModel.onCreateSubfolderClick() },
-                    onEditClick = { /* Действие редактирования папки */ },
+                    onWordClick = { word -> viewModel.onWordClick(word) },
+                    onEditWord = { wordId -> viewModel.onEditWord(wordId) },
                     onSortFoldersClick = { viewModel.onSortClick(SortCategory.FOLDERS) },
                     onSortWordsClick = { viewModel.onSortClick(SortCategory.WORDS) },
                     onDeleteSubfolder = { subFolderId -> viewModel.deleteSubfolder(subFolderId) },
                     onTogglePinSubfolder = { subFolderId -> viewModel.togglePinSubfolder(subFolderId) },
-                    onEditSubfolder = { subFolderId -> /* Открыть редактирование подпапки */ },
+                    onEditSubfolder = { id -> viewModel.onEditSubfolder(id) },
                     onDeleteWord = { wordId -> viewModel.deleteWord(wordId) },
                     onTogglePinWord = { wordId -> viewModel.togglePinWord(wordId) },
-                    onEditWord = { wordId -> /* Открыть редактирование слова */ }
+                    onEditClick = {
+                        uiState.currentFolder?.id?.let { viewModel.onEditSubfolder(it) }
+                    },
+
                 )
             } else {
                 // root
@@ -215,12 +218,13 @@ fun WordsScreen(
                                         val index = uiState.rootFolders.indexOfFirst { it.id == folderItem.id }
                                         val isLeftColumn = index % 2 == 0
 
-                                        TableCard(
+                                        ThemeCard(
                                             title = folderItem.title,
                                             description = folderItem.description ?: "",
                                             icon = folderItem.icon ?: Icons.Rounded.Home,
                                             wordsCount = folderItem.wordsCount,
-                                            updated = folderItem.updated,
+                                            nativeLanguage = folderItem.nativeLanguage,
+                                            targetLanguage = folderItem.targetLanguage,
                                             isPinned = folderItem.isPinned,
                                             menuOnLeft = !isLeftColumn,
                                             modifier = Modifier.animateItem(),
@@ -254,10 +258,12 @@ fun WordsScreen(
         }
 
         // panels
-        if (uiState.showCreateThemePanel) {
+        if (uiState.showCreateTopicPanel) {
             CreateThemePanel(
                 onDismiss = { viewModel.onDismissCreateThemePanel() },
-                onCreate = { title, desc, icon -> viewModel.createTheme(title, desc, icon) }
+                onCreate = { title, desc, icon, nativeLang, targetLang ->
+                    viewModel.createTheme(title, desc, icon, nativeLang, targetLang)
+                }
             )
         }
         if (uiState.showCreateSubfolderPanel) {
@@ -268,13 +274,51 @@ fun WordsScreen(
         }
         if (uiState.showCreateWordPanel) {
             CreateWordPanel(
+                targetLanguage = uiState.currentFolder?.targetLanguage ?: "en",
                 onDismiss = { viewModel.onDismissCreateWordPanel() },
                 onCreate = { word -> viewModel.createWord(word) }
             )
         }
+        uiState.selectedWord?.let { word ->
+            if (uiState.showWordDetailsPanel) {
+                WordDetailsSheet(
+                    word = word,
+                    targetLanguage = uiState.currentFolder?.targetLanguage ?: "en",
+                    onDismiss = { viewModel.onDismissWordDetails() },
+                    onEdit = { viewModel.onEditWordFromDetails() }
+                )
+            }
+        }
+        if (uiState.showEditWordPanel && uiState.selectedWord != null) {
+            EditWordPanel(
+                word = uiState.selectedWord!!,
+                targetLanguage = uiState.currentFolder?.targetLanguage ?: "en",
+                onDismiss = { viewModel.onDismissEditWordPanel() },
+                onSave = { viewModel.updateWord(it) }
+            )
+        }
+
+        if (uiState.showEditTopicPanel && uiState.selectedFolderForEdit != null) {
+            EditThemePanel(
+                folder = uiState.selectedFolderForEdit!!,
+                onDismiss = { viewModel.onDismissEditThemePanel() },
+                onSave = { title, desc, icon ->
+                    viewModel.updateTheme(title, desc, icon)
+                }
+            )
+        }
+
+        if (uiState.showEditSubfolderPanel && uiState.selectedFolderForEdit != null) {
+            EditSubfolderPanel(
+                folder = uiState.selectedFolderForEdit!!,
+                onDismiss = { viewModel.onDismissEditSubfolderPanel() },
+                onSave = { title, desc -> viewModel.updateSubfolder(title, desc) }
+            )
+        }
+
         if (uiState.showSortPanel) {
             val currentOpt = when (uiState.sortCategory) {
-                SortCategory.THEMES -> uiState.themeSortOption
+                SortCategory.THEMES -> uiState.topicSortOption
                 SortCategory.FOLDERS -> uiState.folderSortOption
                 SortCategory.WORDS -> uiState.wordSortOption
             }

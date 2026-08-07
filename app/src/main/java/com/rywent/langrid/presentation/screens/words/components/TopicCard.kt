@@ -13,7 +13,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.School
-import androidx.compose.material.icons.rounded.Update
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,13 +31,14 @@ import androidx.compose.ui.window.DialogProperties
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun TableCard(
+fun ThemeCard(
     modifier: Modifier = Modifier,
     title: String,
     description: String,
     icon: ImageVector,
     wordsCount: Int = 25,
-    updated: String = "updated today",
+    nativeLanguage: String = "ru",
+    targetLanguage: String = "es",
     isPinned: Boolean = false,
     menuOnLeft: Boolean = false,
     onClick: () -> Unit,
@@ -156,20 +157,31 @@ fun TableCard(
 
             Row(
                 modifier = Modifier
-                    .padding(start = 14.dp, bottom = 14.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(scheme.surfaceContainerLow)
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Rounded.Update, null, Modifier.size(12.dp), tint = scheme.primary)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = updated,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(scheme.surfaceContainerLow)
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Translate,
+                        contentDescription = null,
+                        modifier = Modifier.size(11.dp),
+                        tint = scheme.primary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "${nativeLanguage.uppercase()} → ${targetLanguage.uppercase()}",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
             }
         }
 

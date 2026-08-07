@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.rounded.Create
 import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rywent.langrid.presentation.screens.words.FolderNode
+import com.rywent.langrid.presentation.screens.words.WordItem
+import com.rywent.langrid.presentation.screens.words.components.EmptyStateHint
+import com.rywent.langrid.presentation.screens.words.components.EmptyStateView
 import com.rywent.langrid.presentation.screens.words.components.FolderBreadcrumbRow
 import com.rywent.langrid.presentation.screens.words.components.WordCard
 import com.rywent.langrid.presentation.screens.words.components.WordsFolderElement
@@ -36,6 +40,7 @@ fun WordsFolderPage(
     onBreadcrumbClick: (Int) -> Unit,
     onAddWordClick: () -> Unit = {},
     onAddSubfolderClick: () -> Unit = {},
+    onWordClick: (WordItem) -> Unit = {},
     onEditClick: () -> Unit = {},
     onSortFoldersClick: () -> Unit = {},
     onSortWordsClick: () -> Unit = {},
@@ -50,6 +55,9 @@ fun WordsFolderPage(
 
     val sortedSubFolders = currentFolder.subFolders.sortedByDescending { it.isPinned }
     val sortedWords = currentFolder.words.sortedByDescending { it.isPinned }
+
+    val hasFolders = currentFolder.subFolders.isNotEmpty()
+    val hasWords = currentFolder.words.isNotEmpty()
 
     Box(
         modifier = Modifier
@@ -181,43 +189,76 @@ fun WordsFolderPage(
                     .weight(1f)
                     .fillMaxWidth()
             ) { folderId ->
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(
-                        top = 4.dp,
-                        bottom = paddingValues.calculateBottomPadding() + 88.dp
-                    )
-                ) {
-                    items(
-                        items = sortedSubFolders,
-                        key = { "${folderId}_folder_${it.id}" }
-                    ) { subFolder ->
-                        WordsFolderElement(
-                            title = subFolder.title,
-                            wordsCount = subFolder.wordsCount,
-                            progress = "0%",
-                            isPinned = subFolder.isPinned,
-                            modifier = Modifier.animateItem(),
-                            onClick = { onSubFolderClick(subFolder) },
-                            onDelete = { onDeleteSubfolder(subFolder.id) },
-                            onTogglePin = { onTogglePinSubfolder(subFolder.id) },
-                            onEdit = { onEditSubfolder(subFolder.id) }
+                when {
+                    !hasFolders && !hasWords -> {
+                        EmptyStateView(
+                            icon = Icons.Rounded.Inbox,
+                            title = "Nothing here yet",
+                            description = "Add words or create subfolders to start building this theme."
                         )
                     }
 
-                    items(
-                        items = sortedWords,
-                        key = { "${folderId}_word_${it.id}" }
-                    ) { word ->
-                        WordCard(
-                            word = word,
-                            modifier = Modifier.animateItem(),
-                            onClick = {},
-                            onDelete = { onDeleteWord(word.id) },
-                            onTogglePin = { onTogglePinWord(word.id) },
-                            onEdit = { onEditWord(word.id) }
-                        )
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(
+                                top = 4.dp,
+                                bottom = paddingValues.calculateBottomPadding() + 88.dp
+                            )
+                        ) {
+                            items(
+                                items = sortedSubFolders,
+                                key = { "${folderId}_folder_${it.id}" }
+                            ) { subFolder ->
+                                WordsFolderElement(
+                                    title = subFolder.title,
+                                    wordsCount = subFolder.wordsCount,
+                                    progress = "0%",
+                                    isPinned = subFolder.isPinned,
+                                    modifier = Modifier.animateItem(),
+                                    onClick = { onSubFolderClick(subFolder) },
+                                    onDelete = { onDeleteSubfolder(subFolder.id) },
+                                    onTogglePin = { onTogglePinSubfolder(subFolder.id) },
+                                    onEdit = { onEditSubfolder(subFolder.id) }
+                                )
+                            }
+
+                            items(
+                                items = sortedWords,
+                                key = { "${folderId}_word_${it.id}" }
+                            ) { word ->
+                                WordCard(
+                                    word = word,
+                                    targetLanguage = currentFolder.targetLanguage,
+                                    modifier = Modifier.animateItem(),
+                                    onClick = { onWordClick(word) },
+                                    onDelete = { onDeleteWord(word.id) },
+                                    onTogglePin = { onTogglePinWord(word.id) },
+                                    onEdit = { onEditWord(word.id) }
+                                )
+                            }
+
+                            if (hasWords && !hasFolders) {
+                                item {
+                                    EmptyStateHint(
+                                        icon = Icons.Outlined.CreateNewFolder,
+                                        title = "Organize with folders",
+                                        description = "You can also create subfolders to group related words."
+                                    )
+                                }
+                            }
+
+                            if (hasFolders && !hasWords) {
+                                item {
+                                    EmptyStateHint(
+                                        icon = Icons.Default.Add,
+                                        title = "No words yet",
+                                        description = "Tap + to add your first word to this folder."
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -238,3 +279,4 @@ fun WordsFolderPage(
         }
     }
 }
+

@@ -32,6 +32,8 @@ class WordsViewModel @Inject constructor() : ViewModel() {
                 title = "Home",
                 description = "Everything about house, rooms, and furniture...",
                 icon = Icons.Rounded.Home,
+                nativeLanguage = "ru",
+                targetLanguage = "en",
                 subFolders = listOf(
                     FolderNode(
                         id = "1_1",
@@ -83,6 +85,8 @@ class WordsViewModel @Inject constructor() : ViewModel() {
                 title = "Traveling",
                 description = "Airports, flights, hotels and bookings...",
                 icon = Icons.Rounded.AirplanemodeActive,
+                nativeLanguage = "ru",
+                targetLanguage = "en",
                 words = (1..10).map {
                     WordItem(id = "tr_$it", term = "Airport $it", translation = "Аэропорт $it")
                 }
@@ -92,10 +96,12 @@ class WordsViewModel @Inject constructor() : ViewModel() {
                 id = "3",
                 title = "Food & Cooking",
                 description = "Restaurants, dishes and ingredients...",
-                icon = Icons.Rounded.Restaurant
+                icon = Icons.Rounded.Restaurant,
+                nativeLanguage = "ru",
+                targetLanguage = "en"
             ),
 
-        )
+            )
 
         val calculatedFolders = recalculateTreeCounts(mockRootFolders)
         _uiState.update { it.copy(rootFolders = calculatedFolders) }
@@ -195,20 +201,28 @@ class WordsViewModel @Inject constructor() : ViewModel() {
     }
 
     // Panels and creation
-    fun onCreateThemeClick() { _uiState.update { it.copy(showCreateThemePanel = true) } }
-    fun onDismissCreateThemePanel() { _uiState.update { it.copy(showCreateThemePanel = false) } }
+    fun onCreateThemeClick() { _uiState.update { it.copy(showCreateTopicPanel = true) } }
+    fun onDismissCreateThemePanel() { _uiState.update { it.copy(showCreateTopicPanel = false) } }
 
-    fun createTheme(title: String, description: String?, icon: ImageVector) {
+    fun createTheme(
+        title: String,
+        description: String?,
+        icon: ImageVector,
+        nativeLanguage: String,
+        targetLanguage: String
+    ) {
         val folder = FolderNode(
             id = UUID.randomUUID().toString(),
             title = title.trim(),
             description = description?.trim()?.ifBlank { null },
             icon = icon,
+            nativeLanguage = nativeLanguage,
+            targetLanguage = targetLanguage,
             updated = "updated today"
         )
         _uiState.update {
             val newRoots = recalculateTreeCounts(it.rootFolders + folder)
-            it.copy(rootFolders = newRoots, showCreateThemePanel = false)
+            it.copy(rootFolders = newRoots, showCreateTopicPanel = false)
         }
     }
 
@@ -263,7 +277,7 @@ class WordsViewModel @Inject constructor() : ViewModel() {
                     if (folder.id == folderId) folder.copy(isPinned = !folder.isPinned)
                     else folder
                 }
-                .let { applySortToFolders(it, state.themeSortOption) }
+                .let { applySortToFolders(it, state.topicSortOption) }
             state.copy(rootFolders = newRoots)
         }
     }
@@ -278,7 +292,39 @@ class WordsViewModel @Inject constructor() : ViewModel() {
     }
 
     fun onEditTheme(folderId: String) {
-        // TODO
+        val folder = _uiState.value.rootFolders.find { it.id == folderId } ?: return
+        _uiState.update {
+            it.copy(showEditTopicPanel = true, selectedFolderForEdit = folder)
+        }
+    }
+
+    fun onDismissEditThemePanel() {
+        _uiState.update {
+            it.copy(showEditTopicPanel = false, selectedFolderForEdit = null)
+        }
+    }
+
+    fun updateTheme(
+        title: String,
+        description: String?,
+        icon: ImageVector
+    ) {
+        val id = _uiState.value.selectedFolderForEdit?.id ?: return
+        _uiState.update { state ->
+            val newRoots = state.rootFolders.map { f ->
+                if (f.id == id) f.copy(
+                    title = title,
+                    description = description,
+                    icon = icon,
+                    updated = "updated today"
+                ) else f
+            }
+            state.copy(
+                rootFolders = newRoots,
+                showEditTopicPanel = false,
+                selectedFolderForEdit = null
+            )
+        }
     }
 
 
@@ -314,6 +360,35 @@ class WordsViewModel @Inject constructor() : ViewModel() {
             state.copy(
                 rootFolders = calculatedRoots,
                 navigationStack = rebuildStack(calculatedRoots, state.navigationStack)
+            )
+        }
+    }
+
+    fun onEditSubfolder(folderId: String) {
+        val folder = findFolderById(_uiState.value.rootFolders, folderId) ?: return
+        _uiState.update {
+            it.copy(showEditSubfolderPanel = true, selectedFolderForEdit = folder)
+        }
+    }
+
+    fun onDismissEditSubfolderPanel() {
+        _uiState.update {
+            it.copy(showEditSubfolderPanel = false, selectedFolderForEdit = null)
+        }
+    }
+
+    fun updateSubfolder(title: String, description: String?) {
+        val id = _uiState.value.selectedFolderForEdit?.id ?: return
+        _uiState.update { state ->
+            val newRoots = updateFolderInTree(state.rootFolders, id) { f ->
+                f.copy(title = title, description = description, updated = "updated today")
+            }
+            val calculated = recalculateTreeCounts(newRoots)
+            state.copy(
+                rootFolders = calculated,
+                navigationStack = rebuildStack(calculated, state.navigationStack),
+                showEditSubfolderPanel = false,
+                selectedFolderForEdit = null
             )
         }
     }
@@ -368,7 +443,7 @@ class WordsViewModel @Inject constructor() : ViewModel() {
             when (state.sortCategory) {
                 SortCategory.THEMES -> {
                     state.copy(
-                        themeSortOption = option,
+                        topicSortOption = option,
                         rootFolders = applySortToFolders(state.rootFolders, option),
                         showSortPanel = false,
                         sortVersion = state.sortVersion + 1
@@ -437,6 +512,57 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         return sorted.sortedByDescending { it.isPinned }
     }
 
+
+    // show info panels
+
+    fun onWordClick(word: WordItem) {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = true, selectedWord = word)
+        }
+    }
+
+    fun onDismissWordDetails() {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = false, selectedWord = null)
+        }
+    }
+
+    fun onEditWord(wordId: String) {
+        val word = _uiState.value.currentFolder?.words?.find { it.id == wordId } ?: return
+        _uiState.update {
+            it.copy(selectedWord = word, showEditWordPanel = true, showWordDetailsPanel = false)
+        }
+    }
+
+    fun onEditWordFromDetails() {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = false, showEditWordPanel = true)
+        }
+    }
+
+    fun onDismissEditWordPanel() {
+        _uiState.update {
+            it.copy(showEditWordPanel = false, selectedWord = null)
+        }
+    }
+
+    fun updateWord(updated: WordItem) {
+        val current = _uiState.value.currentFolder ?: return
+        _uiState.update { state ->
+            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
+                folder.copy(
+                    words = folder.words.map { if (it.id == updated.id) updated else it }
+                )
+            }
+            val calculated = recalculateTreeCounts(newRoots)
+            state.copy(
+                rootFolders = calculated,
+                navigationStack = rebuildStack(calculated, state.navigationStack),
+                showEditWordPanel = false,
+                selectedWord = null
+            )
+        }
+    }
 
 
     // calculations
