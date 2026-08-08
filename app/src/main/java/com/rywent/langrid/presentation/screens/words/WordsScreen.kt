@@ -29,6 +29,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.rywent.langrid.presentation.screens.words.components.AddWordsFolder
 import com.rywent.langrid.presentation.screens.words.components.EmptyStateView
+import com.rywent.langrid.presentation.screens.words.components.MoveToFolderSheet
 import com.rywent.langrid.presentation.screens.words.components.SearchResultFolderCard
 import com.rywent.langrid.presentation.screens.words.components.SearchResultWordCard
 import com.rywent.langrid.presentation.screens.words.components.SortBottomSheet
@@ -105,6 +106,8 @@ fun WordsScreen(
                     onEditClick = {
                         uiState.currentFolder?.id?.let { viewModel.onEditSubfolder(it) }
                     },
+                    onMoveWord = { viewModel.onMoveWord(it) },
+                    onMoveSubfolder = { viewModel.onMoveSubfolder(it) }
 
                 )
             } else {
@@ -189,6 +192,17 @@ fun WordsScreen(
                                 }
                             }
                         } else {
+                            if (uiState.isLoading) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = scheme.primary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
+                            }
                             if (uiState.rootFolders.isEmpty()) {
                                 EmptyStateView(
                                     icon = Icons.Rounded.Inbox,
@@ -305,6 +319,14 @@ fun WordsScreen(
                 onSave = { title, desc, icon ->
                     viewModel.updateTheme(title, desc, icon)
                 }
+            )
+        }
+
+        if (uiState.showMovePanel) {
+            MoveToFolderSheet(
+                destinations = uiState.moveDestinations,
+                onDismiss = { viewModel.onDismissMovePanel() },
+                onSelect = { viewModel.confirmMove(it) }
             )
         }
 

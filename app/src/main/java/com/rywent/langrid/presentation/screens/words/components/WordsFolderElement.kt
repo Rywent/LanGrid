@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.PushPin
@@ -34,6 +36,7 @@ fun WordsFolderElement(
     onPractice: () -> Unit = {},
     onEdit: () -> Unit = {},
     onTogglePin: () -> Unit = {},
+    onMove: () -> Unit = {},
     onDelete: () -> Unit = {}
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -151,6 +154,10 @@ fun WordsFolderElement(
                 ThinMenuItem(Icons.Rounded.Edit, "Edit") {
                     menuExpanded = false
                     onEdit()
+                }
+                ThinMenuItem(Icons.AutoMirrored.Rounded.DriveFileMove, "Move") {
+                    menuExpanded = false
+                    onMove()
                 }
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),

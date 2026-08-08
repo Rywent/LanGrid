@@ -37,7 +37,19 @@ sealed interface SearchResultItem {
     data class WordResult(val word: WordItem, val folder: FolderNode, val path: String) : SearchResultItem
 }
 
+sealed class MoveTarget {
+    data class Word(val wordId: String, val currentFolderId: String) : MoveTarget()
+    data class Folder(val folderId: String, val currentParentId: String?) : MoveTarget()
+}
+
+data class MoveDestination(
+    val folderId: String,
+    val title: String,
+    val path: String
+)
+
 data class WordsUiState(
+    val isLoading: Boolean = true,
     // search
     val searchQuery: String = "",
     val searchResults: List<SearchResultItem> = emptyList(),
@@ -66,7 +78,12 @@ data class WordsUiState(
     // word info and edit panels
     val showWordDetailsPanel: Boolean = false,
     val selectedWord: WordItem? = null,
-    val showEditWordPanel: Boolean = false
+    val showEditWordPanel: Boolean = false,
+
+    // move
+    val showMovePanel: Boolean = false,
+    val moveTarget: MoveTarget? = null,
+    val moveDestinations: List<MoveDestination> = emptyList()
 ) {
     val currentFolder: FolderNode? get() = navigationStack.lastOrNull()
     val breadcrumbPath: List<String>

@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.rywent.langrid.presentation.screens.words.WordsScreen
 import androidx.compose.ui.unit.IntOffset
+import com.rywent.langrid.presentation.screens.diary.DiaryScreen
 
 private const val BOTTOM_NAV_TRANSITION_DURATION = 350
 
@@ -148,7 +149,7 @@ fun AppNavigation(
                 )
             }
         ) {
-            //
+            DiaryScreen(navController, paddingValues)
         }
 
         // Speech

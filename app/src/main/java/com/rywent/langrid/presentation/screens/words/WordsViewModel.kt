@@ -1,11 +1,10 @@
 package com.rywent.langrid.presentation.screens.words
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AirplanemodeActive
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rywent.langrid.data.repository.FolderRepository
+import com.rywent.langrid.data.repository.WordRepository
 import com.rywent.langrid.presentation.screens.words.components.GeneralSortOption
 import com.rywent.langrid.presentation.screens.words.components.SortCategory
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,99 +12,50 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.UUID
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class WordsViewModel @Inject constructor() : ViewModel() {
+class WordsViewModel @Inject constructor(
+    private val folderRepository: FolderRepository,
+    private val wordRepository: WordRepository
+) : ViewModel() {
+
     private val _uiState = MutableStateFlow(WordsUiState())
     val uiState: StateFlow<WordsUiState> = _uiState.asStateFlow()
 
     init {
-        loadMockData()
-    }
-
-    private fun loadMockData() {
-        val mockRootFolders = listOf(
-            FolderNode(
-                id = "1",
-                title = "Home",
-                description = "Everything about house, rooms, and furniture...",
-                icon = Icons.Rounded.Home,
-                nativeLanguage = "ru",
-                targetLanguage = "en",
-                subFolders = listOf(
-                    FolderNode(
-                        id = "1_1",
-                        title = "Living Room",
-                        description = "Hall interior and appliances",
-                        subFolders = listOf(
-                            FolderNode(
-                                id = "1_1_1",
-                                title = "Furniture",
-                                description = "Sofas, chairs, tables",
-                                words = listOf(
-                                    WordItem(
-                                        id = "w1",
-                                        term = "Sofa",
-                                        translation = "Диван",
-                                        transcription = "/ˈsəʊ.fə/",
-                                        exampleSentence = "She sat on the sofa and read a book.",
-                                        exampleTranslation = "Она села на диван и читала книгу.",
-                                        partOfSpeech = "noun",
-                                        progress = 40
-                                    ),
-                                    WordItem(
-                                        id = "w2",
-                                        term = "Armchair",
-                                        translation = "Кресло",
-                                        transcription = "/ˈɑːm.tʃeər/",
-                                        exampleSentence = "He fell asleep in the armchair.",
-                                        exampleTranslation = "Он заснул в кресле.",
-                                        partOfSpeech = "noun",
-                                        progress = 15
-                                    ),
-                                    WordItem(
-                                        id = "w3",
-                                        term = "Shelf",
-                                        translation = "Полка",
-                                        transcription = "/ʃelf/",
-                                        exampleSentence = "Put the books on the shelf.",
-                                        progress = 70
-                                    )
-                                )
-                            )
-                        )
-                    ),
-                    FolderNode(id = "1_2", title = "Kitchen")
-                )
-            ),
-            FolderNode(
-                id = "2",
-                title = "Traveling",
-                description = "Airports, flights, hotels and bookings...",
-                icon = Icons.Rounded.AirplanemodeActive,
-                nativeLanguage = "ru",
-                targetLanguage = "en",
-                words = (1..10).map {
-                    WordItem(id = "tr_$it", term = "Airport $it", translation = "Аэропорт $it")
+        viewModelScope.launch {
+            folderRepository.observeFolderTree().collect { tree ->
+                _uiState.update { state ->
+                    val sortedRoots = applySortToFolders(tree, state.topicSortOption)
+                    val withInnerSort = applyInnerSorts(sortedRoots, state)
+                    state.copy(
+                        isLoading = false,
+                        rootFolders = withInnerSort,
+                        navigationStack = rebuildStack(withInnerSort, state.navigationStack)
+                    )
                 }
-            ),
-
-            FolderNode(
-                id = "3",
-                title = "Food & Cooking",
-                description = "Restaurants, dishes and ingredients...",
-                icon = Icons.Rounded.Restaurant,
-                nativeLanguage = "ru",
-                targetLanguage = "en"
-            ),
-
-            )
-
-        val calculatedFolders = recalculateTreeCounts(mockRootFolders)
-        _uiState.update { it.copy(rootFolders = calculatedFolders) }
+            }
+        }
     }
+
+    private fun applyInnerSorts(
+        roots: List<FolderNode>,
+        state: WordsUiState
+    ): List<FolderNode> {
+        fun mapNode(node: FolderNode): FolderNode {
+            val subs = applySortToFolders(
+                node.subFolders.map { mapNode(it) },
+                state.folderSortOption
+            )
+            val words = applySortToWords(node.words, state.wordSortOption)
+            return node.copy(subFolders = subs, words = words)
+        }
+        return roots.map { mapNode(it) }
+    }
+
+    // search
 
     fun onSearchQueryChanged(query: String) {
         _uiState.update { state ->
@@ -118,26 +68,36 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private fun performDeepSearch(folders: List<FolderNode>, query: String): List<SearchResultItem> {
+    private fun performDeepSearch(
+        folders: List<FolderNode>,
+        query: String
+    ): List<SearchResultItem> {
         val folderResults = mutableListOf<SearchResultItem.FolderResult>()
         val wordResults = mutableListOf<SearchResultItem.WordResult>()
 
-        fun traverse(currentList: List<FolderNode>, currentPath: List<String>) {
-            for (folder in currentList) {
-                val newPath = currentPath + folder.title
+        fun traverse(list: List<FolderNode>, path: List<String>) {
+            for (folder in list) {
+                val newPath = path + folder.title
                 if (folder.title.contains(query, ignoreCase = true) ||
-                    (folder.description?.contains(query, ignoreCase = true) == true)) {
-                    folderResults.add(SearchResultItem.FolderResult(folder, newPath.joinToString(" / ")))
+                    folder.description?.contains(query, ignoreCase = true) == true
+                ) {
+                    folderResults += SearchResultItem.FolderResult(
+                        folder,
+                        newPath.joinToString(" / ")
+                    )
                 }
                 for (word in folder.words) {
                     if (word.term.contains(query, ignoreCase = true) ||
-                        (word.translation?.contains(query, ignoreCase = true) == true)) {
-                        wordResults.add(SearchResultItem.WordResult(word, folder, newPath.joinToString(" / ")))
+                        word.translation?.contains(query, ignoreCase = true) == true
+                    ) {
+                        wordResults += SearchResultItem.WordResult(
+                            word,
+                            folder,
+                            newPath.joinToString(" / ")
+                        )
                     }
                 }
-                if (folder.subFolders.isNotEmpty()) {
-                    traverse(folder.subFolders, newPath)
-                }
+                if (folder.subFolders.isNotEmpty()) traverse(folder.subFolders, newPath)
             }
         }
 
@@ -145,10 +105,12 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         return folderResults + wordResults
     }
 
+    // navigation
+
     fun navigateIntoFolder(folder: FolderNode) {
-        _uiState.update { state ->
-            state.copy(
-                navigationStack = state.navigationStack + folder,
+        _uiState.update {
+            it.copy(
+                navigationStack = it.navigationStack + folder,
                 searchQuery = "",
                 searchResults = emptyList(),
                 isSearchActive = false
@@ -158,19 +120,16 @@ class WordsViewModel @Inject constructor() : ViewModel() {
 
     fun navigateToFolderByPath(targetFolderId: String) {
         val path = mutableListOf<FolderNode>()
-        fun findPath(folders: List<FolderNode>, currentStack: List<FolderNode>): Boolean {
+        fun findPath(folders: List<FolderNode>, stack: List<FolderNode>): Boolean {
             for (f in folders) {
                 if (f.id == targetFolderId) {
-                    path.addAll(currentStack + f)
+                    path.addAll(stack + f)
                     return true
                 }
-                if (f.subFolders.isNotEmpty()) {
-                    if (findPath(f.subFolders, currentStack + f)) return true
-                }
+                if (f.subFolders.isNotEmpty() && findPath(f.subFolders, stack + f)) return true
             }
             return false
         }
-
         if (findPath(_uiState.value.rootFolders, emptyList())) {
             _uiState.update {
                 it.copy(
@@ -185,24 +144,106 @@ class WordsViewModel @Inject constructor() : ViewModel() {
 
     fun popToFolderIndex(index: Int) {
         _uiState.update { state ->
-            val newStack = if (index <= 0) emptyList() else state.navigationStack.take(index)
-            state.copy(navigationStack = newStack)
+            state.copy(
+                navigationStack = if (index <= 0) emptyList()
+                else state.navigationStack.take(index)
+            )
         }
     }
 
     fun goBack() {
         _uiState.update { state ->
-            if (state.navigationStack.isNotEmpty()) {
-                state.copy(navigationStack = state.navigationStack.dropLast(1))
-            } else {
-                state
+            if (state.navigationStack.isEmpty()) state
+            else state.copy(navigationStack = state.navigationStack.dropLast(1))
+        }
+    }
+
+    // move
+
+    fun onMoveWord(wordId: String) {
+        val current = _uiState.value.currentFolder ?: return
+        val themeRoot = _uiState.value.navigationStack.firstOrNull() ?: current
+        val destinations = flattenThemeFolders(themeRoot)
+            .filter { it.folderId != current.id }
+        _uiState.update {
+            it.copy(
+                showMovePanel = true,
+                moveTarget = MoveTarget.Word(wordId, current.id),
+                moveDestinations = destinations
+            )
+        }
+    }
+
+    fun onMoveSubfolder(folderId: String) {
+        val current = _uiState.value.currentFolder ?: return
+        val themeRoot = _uiState.value.navigationStack.firstOrNull() ?: current
+        val forbidden = collectIds(findFolderById(listOf(themeRoot), folderId))
+        val destinations = flattenThemeFolders(themeRoot)
+            .filter { it.folderId !in forbidden }
+        _uiState.update {
+            it.copy(
+                showMovePanel = true,
+                moveTarget = MoveTarget.Folder(folderId, current.id),
+                moveDestinations = destinations
+            )
+        }
+    }
+
+    fun onDismissMovePanel() {
+        _uiState.update {
+            it.copy(showMovePanel = false, moveTarget = null, moveDestinations = emptyList())
+        }
+    }
+
+    fun confirmMove(destinationFolderId: String) {
+        val target = _uiState.value.moveTarget ?: return
+        viewModelScope.launch {
+            when (target) {
+                is MoveTarget.Word ->
+                    wordRepository.move(target.wordId, destinationFolderId)
+                is MoveTarget.Folder ->
+                    folderRepository.move(target.folderId, destinationFolderId)
+            }
+            _uiState.update {
+                it.copy(showMovePanel = false, moveTarget = null, moveDestinations = emptyList())
             }
         }
     }
 
-    // Panels and creation
-    fun onCreateThemeClick() { _uiState.update { it.copy(showCreateTopicPanel = true) } }
-    fun onDismissCreateThemePanel() { _uiState.update { it.copy(showCreateTopicPanel = false) } }
+    private fun flattenThemeFolders(themeRoot: FolderNode): List<MoveDestination> {
+        val result = mutableListOf<MoveDestination>()
+
+        fun walk(node: FolderNode, path: String) {
+            result.add(
+                MoveDestination(
+                    folderId = node.id,
+                    title = node.title,
+                    path = path
+                )
+            )
+            node.subFolders.forEach { subFolder ->
+                walk(subFolder, "$path / ${subFolder.title}")
+            }
+        }
+
+        walk(themeRoot, themeRoot.title)
+        return result
+    }
+    private fun collectIds(folder: FolderNode?): Set<String> {
+        if (folder == null) return emptySet()
+        return setOf(folder.id) + folder.subFolders.flatMap { collectIds(it) }
+    }
+
+
+    // create theme
+
+    fun onCreateThemeClick() {
+        _uiState.update { it.copy(showCreateTopicPanel = true) }
+    }
+
+    fun onDismissCreateThemePanel() {
+        _uiState.update { it.copy(showCreateTopicPanel = false) }
+    }
 
     fun createTheme(
         title: String,
@@ -211,83 +252,60 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         nativeLanguage: String,
         targetLanguage: String
     ) {
-        val folder = FolderNode(
-            id = UUID.randomUUID().toString(),
-            title = title.trim(),
-            description = description?.trim()?.ifBlank { null },
-            icon = icon,
-            nativeLanguage = nativeLanguage,
-            targetLanguage = targetLanguage,
-            updated = "updated today"
-        )
-        _uiState.update {
-            val newRoots = recalculateTreeCounts(it.rootFolders + folder)
-            it.copy(rootFolders = newRoots, showCreateTopicPanel = false)
+        viewModelScope.launch {
+            folderRepository.createTheme(
+                title, description, icon, nativeLanguage, targetLanguage
+            )
+            _uiState.update { it.copy(showCreateTopicPanel = false) }
         }
     }
 
-    fun onCreateSubfolderClick() { _uiState.update { it.copy(showCreateSubfolderPanel = true) } }
-    fun onDismissCreateSubfolderPanel() { _uiState.update { it.copy(showCreateSubfolderPanel = false) } }
+    // create subfolder
+
+    fun onCreateSubfolderClick() {
+        _uiState.update { it.copy(showCreateSubfolderPanel = true) }
+    }
+
+    fun onDismissCreateSubfolderPanel() {
+        _uiState.update { it.copy(showCreateSubfolderPanel = false) }
+    }
 
     fun createSubfolder(title: String, description: String?) {
-        val current = _uiState.value.currentFolder ?: return
-        val newFolder = FolderNode(
-            id = UUID.randomUUID().toString(),
-            title = title.trim(),
-            description = description?.trim()?.ifBlank { null },
-            updated = "updated today"
-        )
-        _uiState.update { state ->
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(subFolders = folder.subFolders + newFolder)
-            }
-            val calculatedRoots = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculatedRoots,
-                navigationStack = rebuildStack(calculatedRoots, state.navigationStack),
-                showCreateSubfolderPanel = false
-            )
+        val parentId = _uiState.value.currentFolder?.id ?: return
+        viewModelScope.launch {
+            folderRepository.createSubfolder(parentId, title, description)
+            _uiState.update { it.copy(showCreateSubfolderPanel = false) }
         }
     }
 
-    fun onCreateWordClick() { _uiState.update { it.copy(showCreateWordPanel = true) } }
-    fun onDismissCreateWordPanel() { _uiState.update { it.copy(showCreateWordPanel = false) } }
+    // create word
+
+    fun onCreateWordClick() {
+        _uiState.update { it.copy(showCreateWordPanel = true) }
+    }
+
+    fun onDismissCreateWordPanel() {
+        _uiState.update { it.copy(showCreateWordPanel = false) }
+    }
 
     fun createWord(word: WordItem) {
-        val current = _uiState.value.currentFolder ?: return
-        _uiState.update { state ->
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(words = folder.words + word)
-            }
-            val calculatedRoots = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculatedRoots,
-                navigationStack = rebuildStack(calculatedRoots, state.navigationStack),
-                showCreateWordPanel = false
-            )
+        val folderId = _uiState.value.currentFolder?.id ?: return
+        viewModelScope.launch {
+            wordRepository.create(folderId, word)
+            _uiState.update { it.copy(showCreateWordPanel = false) }
         }
     }
 
-    // pin and edit
+    // theme pin / delete / edit
 
     fun togglePinTheme(folderId: String) {
-        _uiState.update { state ->
-            val newRoots = state.rootFolders
-                .map { folder ->
-                    if (folder.id == folderId) folder.copy(isPinned = !folder.isPinned)
-                    else folder
-                }
-                .let { applySortToFolders(it, state.topicSortOption) }
-            state.copy(rootFolders = newRoots)
-        }
+        viewModelScope.launch { folderRepository.togglePin(folderId) }
     }
 
     fun deleteTheme(folderId: String) {
-        _uiState.update { state ->
-            state.copy(
-                rootFolders = state.rootFolders.filter { it.id != folderId },
-                sortVersion = state.sortVersion + 1
-            )
+        viewModelScope.launch {
+            folderRepository.delete(folderId)
+            _uiState.update { it.copy(sortVersion = it.sortVersion + 1) }
         }
     }
 
@@ -304,64 +322,24 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    fun updateTheme(
-        title: String,
-        description: String?,
-        icon: ImageVector
-    ) {
+    fun updateTheme(title: String, description: String?, icon: ImageVector) {
         val id = _uiState.value.selectedFolderForEdit?.id ?: return
-        _uiState.update { state ->
-            val newRoots = state.rootFolders.map { f ->
-                if (f.id == id) f.copy(
-                    title = title,
-                    description = description,
-                    icon = icon,
-                    updated = "updated today"
-                ) else f
+        viewModelScope.launch {
+            folderRepository.updateTheme(id, title, description, icon)
+            _uiState.update {
+                it.copy(showEditTopicPanel = false, selectedFolderForEdit = null)
             }
-            state.copy(
-                rootFolders = newRoots,
-                showEditTopicPanel = false,
-                selectedFolderForEdit = null
-            )
         }
     }
 
-
-    // folders and words
+    // subfolder pin / delete / edit
 
     fun togglePinSubfolder(folderId: String) {
-        _uiState.update { state ->
-            val current = state.currentFolder ?: return@update state
-            val updatedSubFolders = applySortToFolders(
-                current.subFolders.map {
-                    if (it.id == folderId) it.copy(isPinned = !it.isPinned) else it
-                },
-                state.folderSortOption
-            )
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(subFolders = updatedSubFolders)
-            }
-            state.copy(
-                rootFolders = newRoots,
-                navigationStack = rebuildStack(newRoots, state.navigationStack)
-            )
-        }
+        viewModelScope.launch { folderRepository.togglePin(folderId) }
     }
 
     fun deleteSubfolder(folderId: String) {
-        _uiState.update { state ->
-            val current = state.currentFolder ?: return@update state
-            val updatedSubFolders = current.subFolders.filter { it.id != folderId }
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(subFolders = updatedSubFolders)
-            }
-            val calculatedRoots = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculatedRoots,
-                navigationStack = rebuildStack(calculatedRoots, state.navigationStack)
-            )
-        }
+        viewModelScope.launch { folderRepository.delete(folderId) }
     }
 
     fun onEditSubfolder(folderId: String) {
@@ -379,56 +357,70 @@ class WordsViewModel @Inject constructor() : ViewModel() {
 
     fun updateSubfolder(title: String, description: String?) {
         val id = _uiState.value.selectedFolderForEdit?.id ?: return
-        _uiState.update { state ->
-            val newRoots = updateFolderInTree(state.rootFolders, id) { f ->
-                f.copy(title = title, description = description, updated = "updated today")
+        viewModelScope.launch {
+            folderRepository.updateSubfolder(id, title, description)
+            _uiState.update {
+                it.copy(showEditSubfolderPanel = false, selectedFolderForEdit = null)
             }
-            val calculated = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculated,
-                navigationStack = rebuildStack(calculated, state.navigationStack),
-                showEditSubfolderPanel = false,
-                selectedFolderForEdit = null
-            )
         }
     }
 
+    // word pin / delete / edit
+
     fun togglePinWord(wordId: String) {
-        _uiState.update { state ->
-            val current = state.currentFolder ?: return@update state
-            val updatedWords = applySortToWords(
-                current.words.map {
-                    if (it.id == wordId) it.copy(isPinned = !it.isPinned) else it
-                },
-                state.wordSortOption
-            )
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(words = updatedWords)
-            }
-            state.copy(
-                rootFolders = newRoots,
-                navigationStack = rebuildStack(newRoots, state.navigationStack)
-            )
-        }
+        viewModelScope.launch { wordRepository.togglePin(wordId) }
     }
 
     fun deleteWord(wordId: String) {
-        _uiState.update { state ->
-            val current = state.currentFolder ?: return@update state
-            val updatedWords = current.words.filter { it.id != wordId }
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(words = updatedWords)
-            }
-            val calculatedRoots = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculatedRoots,
-                navigationStack = rebuildStack(calculatedRoots, state.navigationStack)
+        viewModelScope.launch { wordRepository.delete(wordId) }
+    }
+
+    fun onWordClick(word: WordItem) {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = true, selectedWord = word)
+        }
+    }
+
+    fun onDismissWordDetails() {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = false, selectedWord = null)
+        }
+    }
+
+    fun onEditWord(wordId: String) {
+        val word = _uiState.value.currentFolder?.words?.find { it.id == wordId } ?: return
+        _uiState.update {
+            it.copy(
+                selectedWord = word,
+                showEditWordPanel = true,
+                showWordDetailsPanel = false
             )
         }
     }
 
+    fun onEditWordFromDetails() {
+        _uiState.update {
+            it.copy(showWordDetailsPanel = false, showEditWordPanel = true)
+        }
+    }
 
-    // search
+    fun onDismissEditWordPanel() {
+        _uiState.update {
+            it.copy(showEditWordPanel = false, selectedWord = null)
+        }
+    }
+
+    fun updateWord(updated: WordItem) {
+        val folderId = _uiState.value.currentFolder?.id ?: return
+        viewModelScope.launch {
+            wordRepository.update(folderId, updated)
+            _uiState.update {
+                it.copy(showEditWordPanel = false, selectedWord = null)
+            }
+        }
+    }
+
+    // sort
 
     fun onSortClick(category: SortCategory) {
         _uiState.update { it.copy(showSortPanel = true, sortCategory = category) }
@@ -441,19 +433,17 @@ class WordsViewModel @Inject constructor() : ViewModel() {
     fun setSortOption(option: GeneralSortOption?) {
         _uiState.update { state ->
             when (state.sortCategory) {
-                SortCategory.THEMES -> {
-                    state.copy(
-                        topicSortOption = option,
-                        rootFolders = applySortToFolders(state.rootFolders, option),
-                        showSortPanel = false,
-                        sortVersion = state.sortVersion + 1
-                    )
-                }
+                SortCategory.THEMES -> state.copy(
+                    topicSortOption = option,
+                    rootFolders = applySortToFolders(state.rootFolders, option),
+                    showSortPanel = false,
+                    sortVersion = state.sortVersion + 1
+                )
                 SortCategory.FOLDERS -> {
                     val current = state.currentFolder ?: return@update state
-                    val updatedSubFolders = applySortToFolders(current.subFolders, option)
-                    val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                        folder.copy(subFolders = updatedSubFolders)
+                    val updatedSubs = applySortToFolders(current.subFolders, option)
+                    val newRoots = updateFolderInTree(state.rootFolders, current.id) {
+                        it.copy(subFolders = updatedSubs)
                     }
                     state.copy(
                         folderSortOption = option,
@@ -466,8 +456,8 @@ class WordsViewModel @Inject constructor() : ViewModel() {
                 SortCategory.WORDS -> {
                     val current = state.currentFolder ?: return@update state
                     val updatedWords = applySortToWords(current.words, option)
-                    val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                        folder.copy(words = updatedWords)
+                    val newRoots = updateFolderInTree(state.rootFolders, current.id) {
+                        it.copy(words = updatedWords)
                     }
                     state.copy(
                         wordSortOption = option,
@@ -498,98 +488,37 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         return sorted.sortedByDescending { it.isPinned }
     }
 
-    private fun applySortToWords(words: List<WordItem>, option: GeneralSortOption?): List<WordItem> {
-        if (option == null) return words
+    private fun applySortToWords(
+        words: List<WordItem>,
+        option: GeneralSortOption?
+    ): List<WordItem> {
+        if (option == null) return words.sortedByDescending { it.isPinned }
         val sorted = when (option) {
             GeneralSortOption.DATE_DESC -> words
             GeneralSortOption.DATE_ASC -> words.reversed()
             GeneralSortOption.NAME_ASC -> words.sortedBy { it.term.lowercase() }
             GeneralSortOption.NAME_DESC -> words.sortedByDescending { it.term.lowercase() }
-            GeneralSortOption.TRANSLATION_ASC -> words.sortedBy { (it.translation ?: "").lowercase() }
+            GeneralSortOption.TRANSLATION_ASC ->
+                words.sortedBy { (it.translation ?: "").lowercase() }
             GeneralSortOption.COUNT_DESC,
             GeneralSortOption.COUNT_ASC -> words
         }
         return sorted.sortedByDescending { it.isPinned }
     }
 
-
-    // show info panels
-
-    fun onWordClick(word: WordItem) {
-        _uiState.update {
-            it.copy(showWordDetailsPanel = true, selectedWord = word)
-        }
-    }
-
-    fun onDismissWordDetails() {
-        _uiState.update {
-            it.copy(showWordDetailsPanel = false, selectedWord = null)
-        }
-    }
-
-    fun onEditWord(wordId: String) {
-        val word = _uiState.value.currentFolder?.words?.find { it.id == wordId } ?: return
-        _uiState.update {
-            it.copy(selectedWord = word, showEditWordPanel = true, showWordDetailsPanel = false)
-        }
-    }
-
-    fun onEditWordFromDetails() {
-        _uiState.update {
-            it.copy(showWordDetailsPanel = false, showEditWordPanel = true)
-        }
-    }
-
-    fun onDismissEditWordPanel() {
-        _uiState.update {
-            it.copy(showEditWordPanel = false, selectedWord = null)
-        }
-    }
-
-    fun updateWord(updated: WordItem) {
-        val current = _uiState.value.currentFolder ?: return
-        _uiState.update { state ->
-            val newRoots = updateFolderInTree(state.rootFolders, current.id) { folder ->
-                folder.copy(
-                    words = folder.words.map { if (it.id == updated.id) updated else it }
-                )
-            }
-            val calculated = recalculateTreeCounts(newRoots)
-            state.copy(
-                rootFolders = calculated,
-                navigationStack = rebuildStack(calculated, state.navigationStack),
-                showEditWordPanel = false,
-                selectedWord = null
-            )
-        }
-    }
-
-
-    // calculations
-    private fun recalculateTreeCounts(folders: List<FolderNode>): List<FolderNode> {
-        return folders.map { folder ->
-            val subRec = recalculateTreeCounts(folder.subFolders)
-            val totalWords = folder.words.size + subRec.sumOf { it.wordsCount }
-            folder.copy(
-                subFolders = subRec,
-                wordsCount = totalWords
-            )
-        }
-    }
+    // tree helpers
 
     private fun updateFolderInTree(
         folders: List<FolderNode>,
         targetId: String,
         transform: (FolderNode) -> FolderNode
-    ): List<FolderNode> {
-        return folders.map { folder ->
-            when {
-                folder.id == targetId -> transform(folder)
-                folder.subFolders.isNotEmpty() -> folder.copy(
-                    subFolders = updateFolderInTree(folder.subFolders, targetId, transform)
-                )
-                else -> folder
-            }
+    ): List<FolderNode> = folders.map { folder ->
+        when {
+            folder.id == targetId -> transform(folder)
+            folder.subFolders.isNotEmpty() -> folder.copy(
+                subFolders = updateFolderInTree(folder.subFolders, targetId, transform)
+            )
+            else -> folder
         }
     }
 
@@ -601,7 +530,8 @@ class WordsViewModel @Inject constructor() : ViewModel() {
         return null
     }
 
-    private fun rebuildStack(roots: List<FolderNode>, oldStack: List<FolderNode>): List<FolderNode> {
-        return oldStack.mapNotNull { old -> findFolderById(roots, old.id) }
-    }
+    private fun rebuildStack(
+        roots: List<FolderNode>,
+        oldStack: List<FolderNode>
+    ): List<FolderNode> = oldStack.mapNotNull { old -> findFolderById(roots, old.id) }
 }

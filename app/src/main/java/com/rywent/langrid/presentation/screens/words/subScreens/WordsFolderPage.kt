@@ -49,6 +49,8 @@ fun WordsFolderPage(
     onEditSubfolder: (String) -> Unit = {},
     onDeleteWord: (String) -> Unit = {},
     onTogglePinWord: (String) -> Unit = {},
+    onMoveWord: (String) -> Unit = {},
+    onMoveSubfolder: (String) -> Unit = {},
     onEditWord: (String) -> Unit = {}
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -220,6 +222,7 @@ fun WordsFolderPage(
                                     onClick = { onSubFolderClick(subFolder) },
                                     onDelete = { onDeleteSubfolder(subFolder.id) },
                                     onTogglePin = { onTogglePinSubfolder(subFolder.id) },
+                                    onMove = { onMoveSubfolder(subFolder.id) },
                                     onEdit = { onEditSubfolder(subFolder.id) }
                                 )
                             }
@@ -235,6 +238,7 @@ fun WordsFolderPage(
                                     onClick = { onWordClick(word) },
                                     onDelete = { onDeleteWord(word.id) },
                                     onTogglePin = { onTogglePinWord(word.id) },
+                                    onMove = { onMoveWord(word.id) },
                                     onEdit = { onEditWord(word.id) }
                                 )
                             }

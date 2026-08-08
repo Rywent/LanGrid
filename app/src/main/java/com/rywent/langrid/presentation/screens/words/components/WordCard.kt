@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Stop
@@ -41,6 +43,7 @@ fun WordCard(
     onClick: () -> Unit = {},
     onEdit: () -> Unit = {},
     onTogglePin: () -> Unit = {},
+    onMove: () -> Unit = {},
     onDelete: () -> Unit = {}
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -222,6 +225,10 @@ fun WordCard(
                     }
                 )
 
+                ThinMenuItem(Icons.AutoMirrored.Rounded.DriveFileMove, "Move") {
+                    menuExpanded = false
+                    onMove()
+                }
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
                     color = scheme.outlineVariant.copy(alpha = 0.4f)

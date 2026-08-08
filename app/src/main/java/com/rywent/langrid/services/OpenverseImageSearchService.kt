@@ -31,7 +31,6 @@ object OpenverseImageSearchService {
         val query = term.trim().lowercase()
         if (query.length < 2) return@withContext emptyList()
 
-        // если уже есть кеш — сразу отдаём (повторный поиск того же слова)
         cachedImages[query]?.takeIf { it.isNotEmpty() }?.let { cached ->
             paginationIndexes[query] = minOf(INITIAL_LOAD, cached.size)
             return@withContext cached.take(INITIAL_LOAD)

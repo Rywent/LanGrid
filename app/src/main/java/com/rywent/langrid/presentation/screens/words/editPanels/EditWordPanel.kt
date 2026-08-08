@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rywent.langrid.presentation.screens.words.WordItem
 import com.rywent.langrid.presentation.screens.words.creationPanels.WordImageSection
-import com.rywent.langrid.services.ImageSearchService
+import com.rywent.langrid.services.OpenverseImageSearchService
 import com.rywent.langrid.services.TranscriptionResult
 import com.rywent.langrid.services.TranscriptionService
 import kotlinx.coroutines.launch
@@ -68,7 +68,7 @@ fun EditWordPanel(
         if (query.length >= 2) {
             coroutineScope.launch {
                 isLoadingImages = true
-                val results = ImageSearchService.searchImages(query)
+                val results = OpenverseImageSearchService.searchImages(query)
                 imageUrls = (listOfNotNull(selectedImageUrl) + results).distinct()
                 isLoadingImages = false
             }
@@ -244,7 +244,7 @@ fun EditWordPanel(
                         if (term.trim().length >= 2) {
                             coroutineScope.launch {
                                 isLoadingImages = true
-                                val more = ImageSearchService.loadMoreImages(term)
+                                val more = OpenverseImageSearchService.loadMoreImages(term)
                                 imageUrls = (imageUrls + more).distinct()
                                 isLoadingImages = false
                             }
